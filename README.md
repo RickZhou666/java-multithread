@@ -1,7 +1,24 @@
 # java-multithread
 This is the udemy course for java multithread and concurrency
 
-<br><br><br>
+
+# 0. Java tips
+1. diamond operator is not supported in -source 1.5
+```pom
+1. specify java version in pom
+<!-- https://www.baeldung.com/maven-java-version -->
+    <properties>
+        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.source>1.8</maven.compiler.source>
+    </properties>
+
+2. project structure make it 1.8
+
+```
+
+
+
+<br><br><br><br><br><br>
 
 
 # 1. introduction
@@ -183,6 +200,7 @@ This is the udemy course for java multithread and concurrency
 
 - multi processes
     - ![img](./imgs/Xnip2023-12-09_13-58-45.jpg)
+    
 
 ### 1.7.1 when to prefer multithreaded architecture
     - prefer if the tasks share a lot of data
@@ -204,3 +222,266 @@ This is the udemy course for java multithread and concurrency
 - [inside the linux 2.6 completely fair scheduler](https://developer.ibm.com/tutorials/l-completely-fair-scheduler/)
 - Java [Thread.State](https://docs.oracle.com/javase/8/docs/api/java/lang/Thread.State.html)
 
+
+<br><br><br><br><br><br>
+
+# 2. Threading fundamentals - Thread creation
+
+## 2.1 Threads creation - part 1, thread capabilities & debugging
+1. Thread creation with java.lang.Runnable
+2. Thread class capabilities
+3. Thread Debugging
+
+- main thread is destroyed by jvm while new thread still running
+    - ![img](./imgs/Xnip2023-12-11_10-47-25.jpg)
+    
+
+```java
+// example 1
+package thread.creation;
+
+/**
+ * @Author: Rick
+ * @Date: 2023/12/9 14:20
+ */
+public class example {
+
+    public static void main(String[] args) throws InterruptedException {
+        Thread thread = new Thread(new Runnable() {
+            public void run() {
+                System.out.println("we are in thread " + Thread.currentThread().getName());
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                System.out.println("Current thread priority id " + Thread.currentThread().getPriority());
+            }
+        });
+
+        thread.setName("New worker Thread");
+        // priority [1, 10]
+        thread.setPriority(Thread.MAX_PRIORITY);
+
+        System.out.println("We are in thread: " + Thread.currentThread().getName() + " before starting a new thread");
+        thread.start();
+        System.out.println("We are in thread: " + Thread.currentThread().getName() + " after starting a new thread");
+
+    }
+}
+
+
+```
+
+
+```java
+// example 2
+package thread.creation;
+
+/**
+ * @Author: Rick
+ * @Date: 2023/12/9 14:20
+ */
+public class example2 {
+
+    public static void main(String[] args) throws InterruptedException {
+        Thread thread = new Thread(new Runnable() {
+            public void run() {
+                // code that will in a new thread
+                throw new RuntimeException("Intentional Exception");
+            }
+        });
+
+        thread.setName("Misbehaving thread");
+        thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler(){
+            public void uncaughtException(Thread t, Throwable e) {
+                System.out.println("A critical error in thread " + t.getName()
+                        + " the error is " + e.getMessage());
+            }
+        });
+
+        thread.start();
+    }
+}
+
+
+```
+
+<br><br><br>
+
+## 2.2 Threads creation - part 2, thread inheitance
+1. Thread creation with java.lang.Thread
+2. case study - interactive multithreaded application
+    - ![img](./imgs/Xnip2023-12-11_11-15-48.jpg)
+
+```java
+package thread.creation.example2;
+
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+/**
+ * @Author: Rick
+ * @Date: 2023/12/11 10:55
+ */
+public class example2 {
+
+    public static final int MAX_PASSWORD = 9999;
+
+    public static void main(String[] args) {
+
+
+        // for (int i = 1; i <= 20; i++) {
+        // System.out.println("competition round " + i);
+
+        Random random = new Random();
+
+        Vault vault = new Vault(random.nextInt(MAX_PASSWORD));
+        List<Thread> threads = new ArrayList<>();
+
+        threads.add(new AscendingHackerThread(vault));
+        threads.add(new DescendingHackerThread(vault));
+        threads.add(new PoliceThread());
+
+        for (Thread thread : threads){
+            thread.start();
+        }
+        // }
+
+    }
+
+    private static class Vault {
+        private int password;
+
+        public Vault(int password) {
+            this.password = password;
+        }
+
+        public boolean isCorrectPassword(int guess) {
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            return this.password == guess;
+        }
+    }
+
+    private static abstract class HackerThread extends Thread {
+        protected Vault vault;
+
+        public HackerThread(Vault vault) {
+            this.vault = vault;
+            this.setName(this.getClass().getSimpleName());
+            this.setPriority(Thread.MAX_PRIORITY);
+        }
+
+        @Override
+        public void start() {
+            System.out.println("Starting thread " + this.getName());
+            super.start();
+        }
+    }
+
+    private static class AscendingHackerThread extends HackerThread {
+        public AscendingHackerThread(Vault vault) {
+            super(vault);
+        }
+
+        @Override
+        public void run() {
+            for (int guess = 0; guess < MAX_PASSWORD; guess++) {
+                if (vault.isCorrectPassword(guess)) {
+                    System.out.println(this.getName() + " guessed the password " + guess);
+                    System.exit(0);
+                }
+            }
+        }
+    }
+
+    private static class DescendingHackerThread extends HackerThread {
+        public DescendingHackerThread(Vault vault) {
+            super(vault);
+        }
+
+        @Override
+        public void run() {
+            for (int guess = MAX_PASSWORD; guess >= 0; guess--) {
+                if (vault.isCorrectPassword(guess)) {
+                    System.out.println(this.getName() + " guessed the password " + guess);
+                    System.exit(0);
+                }
+            }
+        }
+    }
+
+    private static class PoliceThread extends Thread {
+        @Override
+        public void run() {
+            for (int i = 10; i > 0; i--) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+
+                }
+                System.out.println(i);
+            }
+            System.out.println("Game over for you hacker");
+            System.exit(0);
+        }
+    }
+}
+
+```
+
+3. Summary
+    - thread class - encapsulates all thread related functionality
+    - two ways to run code on a new thread
+        - implement Runnable interface, and pass to a new Thread object
+        - Extend Thread class, and create an object of the class
+    - both ways are equally correct
+
+
+4. MultiExecutor
+```java
+package thread.creation;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * @Author: Rick
+ * @Date: 2023/12/11 11:48
+ */
+public class MultiExecutor {
+
+    private final List<Runnable> tasks;
+    public MultiExecutor(List<Runnable> tasks) {
+        this.tasks = tasks;
+    }
+
+    public void executeAll(){
+        for (Runnable task : tasks){
+            Thread thread  = new Thread(task);
+            thread.start();
+        }
+    }
+
+    // public void executeAll(){
+    //     List<Thread> threads = new ArrayList<>(tasks.size());
+
+    //     for (Runnable task : tasks){
+    //         Thread thread  = new Thread(task);
+    //         threads.add(thread);
+    //     }
+
+    //     for (Thread thread : threads){
+    //         thread.start();
+    //     }
+
+    // }
+}
+
+```
