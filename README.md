@@ -235,6 +235,7 @@ This is the udemy course for java multithread and concurrency
 - main thread is destroyed by jvm while new thread still running
     - ![img](./imgs/Xnip2023-12-11_10-47-25.jpg)
     
+    
 
 ```java
 // example 1
@@ -485,3 +486,225 @@ public class MultiExecutor {
 }
 
 ```
+
+
+<br><br><br><br><br><br>
+
+
+# 3. Threading fundamentals - Thread Coordination
+
+## 3.1 Thread Termination & Daemon Threads
+### 1. Thread termination
+1. Thread Termination - why and when?
+    - threads consume resources
+        - memory and kernal resources
+        - CPU cycles and cache memory
+    - if a thread finished its work, but the application is still running, we want to clean up the thread's resources
+    - if a thread is misbehaving, we want to stop it
+    - by default, the application will not stop as long as at least one thread is still running
+
+<br>
+
+### 2. Thread.interrupt()
+- ![img](./imgs/Xnip2023-12-11_11-59-47.jpg)
+
+
+- when can we interrupt a Thread?
+    1. if the thread is executing a method that throws an InterruptedException
+        - even though the `main` thread is long gone, but BlockingTask thread is still blocking the application
+    ```java
+    package thread.interrupt;
+
+    /**
+    * @Author: Rick
+    * @Date: 2023/12/11 12:03
+    */
+    public class example {
+        public static void main(String[] args) {
+            Thread thread = new Thread(new BlockingTask());
+
+            thread.start();
+
+            // thread.interrupt();
+        }
+
+        private static class BlockingTask implements Runnable{
+            @Override
+            public void run() {
+                try {
+                    Thread.sleep(500000);
+                } catch (InterruptedException e) {
+                    System.out.println("Exiting blocking method " + Thread.currentThread().getName());
+                }
+            }
+        }
+    }
+    ```
+    - ![img](./imgs/Xnip2023-12-11_12-07-24.jpg)
+    
+    
+    <br><br>
+
+    2. if the thread's code is handling the interrupt signal explicitly
+        - not just `interrupt` method, we need handle the singal inside runnable logic
+    
+        ```java
+        package thread.interrupt;
+
+        import java.math.BigInteger;
+
+        /**
+        * @Author: Rick
+        * @Date: 2023/12/11 12:10
+        */
+        public class example2 {
+            public static void main(String[] args) {
+                Thread thread   = new Thread(new LongComputationTask(new BigInteger("200000"), new BigInteger("10000000")));
+                thread.start();
+                thread.interrupt();
+            }
+
+            private static class LongComputationTask implements Runnable {
+                private BigInteger base;
+                private BigInteger power;
+
+                public LongComputationTask(BigInteger base, BigInteger power) {
+                    this.base = base;
+                    this.power = power;
+                }
+
+                @Override
+                public void run() {
+                    System.out.println(base + "^" + power + " = " + pow(base, power));
+                }
+
+                private BigInteger pow(BigInteger base, BigInteger power){
+                    BigInteger result = BigInteger.ONE;
+                    for (BigInteger i = BigInteger.ZERO; i.compareTo(power) != 0; i = i.add(BigInteger.ONE)) {
+                        if (Thread.currentThread().isInterrupted()){
+                            System.out.println("Prematurely interrupted computation");
+                            return BigInteger.ZERO;
+                        }
+                        result = result.multiply(base);
+                    }
+                    return  result;
+                }
+            }
+        }
+        ```
+        - ![img](./imgs/Xnip2023-12-11_12-18-22.jpg)
+
+<br>
+
+### 3. Daemon threads
+- background threads that do not prevent the application from exiting if the main thread terminates
+
+- Daemon Threads - Scenario 1
+    - background tasks, that should not block our application from terminating
+    - e.g. file saving thread in a Text Editor
+
+- Daemon Threads - Scenario 2
+    - code in a worker thread is not under our control, and we do not want it to block our application from terminating
+    - e.g. worker thread that uses an external library
+
+- make thread to be daemon, it wont block application from terminating
+    ```java
+    public static void main(String[] args) throws InterruptedException {
+        Thread thread   = new Thread(new LongComputationTask(new BigInteger("200000"), new BigInteger("10000000")));
+        thread.setDaemon(true);
+        thread.start();
+        thread.sleep(100);
+        thread.interrupt();
+    }
+    ```
+    - ![img](./imgs/Xnip2023-12-11_12-43-30.jpg)
+    
+
+### 4. summary
+- learned how to stop threads by calling the thread.interrupt() method
+- if the method does not respond to the interrupt signal by throwing the InterruptedException, we need to check for that signal and handle it ourselves
+- to prevent a thread from blocking our app from exiting, we set the thread to be a Daemon thread
+
+### 5. quiz
+1. System.in.read() does not respond to Thread.interrupt();
+
+<br><br><br>
+
+## 3.2 Joining Threads  
+
+### 1. Threads coordination with Thread.join()
+- Thread coordination - why do we need it?
+    - different threads run independently
+    - order of execution is out of our control
+        - thread A after thread B
+        - thread B after thread A
+        - thread A and thread B running concurrently
+        - thread A and thread B on parallel
+
+<br>
+
+- thread coordination - dependency
+    - what if one thread depends on another thread?
+    - ![img](./imgs/Xnip2023-12-14_16-04-02.jpg)
+
+<br>
+
+- thread coordination - naive solution
+    - (busy way) thread B runs in a loop and keeps checking if thread A's result is ready
+    - this will slow down thread A
+    ```java
+    void waitForThreadA(){
+        while (!threadA.isFinished()){
+            // burn CPU cycles
+        }
+    }
+    ```
+    - ![img](./imgs/Xnip2023-12-14_16-03-00.jpg)
+
+<br>
+
+- thread coordination - desired solution
+    - ![img](./imgs/Xnip2023-12-14_16-03-50.jpg)
+
+<br>
+
+- thread coordination - Thread.join()
+    - public final void join()
+    - public final void join(long millis, int nanos)
+    - public final void join(long millis)
+
+
+### 2. Case study
+- factorial thread and main thread are in race condition
+1. thread.join() will only return when that thread is terminated
+- by the time main thread is terminated, all the factorial threads is guaranteed finished
+
+- what if a number if very large
+    - all the threads are hanging to wait for the extremely large number
+        - ![img](./imgs/Xnip2023-12-14_16-18-50.jpg)
+    2. setup a timeout for join
+    ```java
+    ```java
+    for (Thread thread : threads) {
+        // how long we can wait
+        thread.join(2000);
+    }
+    
+    ```
+    3. set all threads to be daemon thread, so application can be terminated
+
+
+
+- Thread coordination - Thread.join(..)
+    - more control over independent threads
+    - safely collect and aggregate results
+    - gracefully handle runaway threads using Thread.join(timeout)
+
+
+### 3. Summary
+- do not rely on the order of execution
+- always use thread coordination
+- design code for worst case scenario
+- threads may take unreasonably long time
+- always use the Thread.join(...) with a time limit
+- stop the thread if it's not done in time
